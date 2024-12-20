@@ -24,18 +24,32 @@ static uint32_t jpegWrite(JDEC* decoder, void* bitmap, JRECT* rect) {
     jpeg_decode_ctx_t* ctx = (jpeg_decode_ctx_t*)decoder->device;
     uint8_t* src = (uint8_t*)bitmap;
     
-    for (int y = rect->top; y <= rect->bottom; y++) {
-        for (int x = rect->left; x <= rect->right; x++) {
-            if (x >= ctx->width || y >= ctx->height) continue;
+    int width = rect->right - rect->left + 1;
+    int height = rect->bottom - rect->top + 1;
+    
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            int srcX = rect->left + x;
+            int srcY = rect->top + y;
             
-            // Get grayscale value (assuming RGB565 format)
-            uint8_t gray = src[(y - rect->top) * (rect->right - rect->left + 1) + (x - rect->left)] >> 4;
+            if (srcX >= ctx->width || srcY >= ctx->height) continue;
+            
+            // Get RGB values - JPEG decoder outputs 24-bit color (8 bits per component)
+            uint8_t r = src[y * width * 3 + x * 3];
+            uint8_t g = src[y * width * 3 + x * 3 + 1];
+            uint8_t b = src[y * width * 3 + x * 3 + 2];
+            
+            // Convert to grayscale using standard weights
+            uint8_t gray = (r * 77 + g * 151 + b * 28) >> 8;
+            
+            // Convert to 4-bit grayscale (0-15)
+            gray = (gray * 15) / 255;
             
             // Calculate position in framebuffer
-            int pos = y * (ctx->width / 2) + (x / 2);
+            int pos = srcY * (ctx->width / 2) + (srcX / 2);
             
             // Pack two 4-bit values into one byte
-            if (x % 2 == 0) {
+            if (srcX % 2 == 0) {
                 ctx->framebuffer[pos] = (gray << 4);
             } else {
                 ctx->framebuffer[pos] |= gray;
@@ -90,8 +104,9 @@ public:
         // Clear framebuffer
         memset(framebuffer, 0xFF, EPD_WIDTH * EPD_HEIGHT / 2);
 
-        // Allocate work space for JPEG decoder
-        uint8_t *work = (uint8_t*)heap_caps_malloc(3100, MALLOC_CAP_SPIRAM);
+        // Allocate work space for JPEG decoder (increased for larger images)
+        size_t workSize = 32768; // 32KB workspace
+        uint8_t *work = (uint8_t*)heap_caps_malloc(workSize, MALLOC_CAP_SPIRAM);
         if (!work) {
             Serial.println("Failed to allocate JPEG workspace");
             file.close();
@@ -106,7 +121,8 @@ public:
         ctx.x = 0;
         ctx.y = 0;
 
-        JRESULT res = jd_prepare(&decoder, jpegRead, work, 3100, &file);
+        decoder.device = &file; // Set file as device for jpegRead
+        JRESULT res = jd_prepare(&decoder, jpegRead, work, workSize, &file);
         if (res != JDR_OK) {
             Serial.println("Failed to prepare JPEG decoder");
             heap_caps_free(work);
@@ -114,7 +130,8 @@ public:
             return false;
         }
 
-        res = jd_decomp(&decoder, jpegWrite, 0);
+        decoder.device = &ctx; // Set context as device for jpegWrite
+        res = jd_decomp(&decoder, jpegWrite, 1); // Scale = 1 for full resolution
         if (res != JDR_OK) {
             Serial.println("Failed to decompress JPEG");
             heap_caps_free(work);

@@ -114,7 +114,7 @@ void listImages() {
     while (file) {
         if (!file.isDirectory()) {
             String filename = file.name();
-            if ((filename.endsWith(".jpg") || filename.endsWith(".jpeg")) && filename.startsWith("/images/")) {
+            if (filename.endsWith(".jpg") || filename.endsWith(".jpeg") || filename.endsWith(".JPG")) {
                 images.push_back(filename);
                 Serial.print("Found image: ");
                 Serial.println(filename);
