@@ -7,7 +7,8 @@
 #include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "firasans.h"
+
+#include "image.h"
 
 // Reusable display component
 class EpaperDisplay {
@@ -28,14 +29,14 @@ public:
                 return false;
             }
             
-            // Clear framebuffer to white
+            // Clear framebuffer
             memset(framebuffer, 0xFF, EPD_WIDTH * EPD_HEIGHT / 2);
             initialized = true;
         }
         return true;
     }
 
-    void displayText(const char* text) {
+    void displayImage() {
         if (!initialized || !framebuffer) {
             Serial.println("Display not initialized!");
             return;
@@ -45,17 +46,10 @@ public:
         epd_poweron();
         epd_clear();
 
-        // Clear to white first
-        memset(framebuffer, 0xFF, EPD_WIDTH * EPD_HEIGHT / 2);
+        // Draw test pattern
+        draw_test_pattern(framebuffer);
 
-        // Set text position in center
-        int cursor_x = EPD_WIDTH/2;
-        int cursor_y = EPD_HEIGHT/2;
-
-        // Write text using write_string function
-        write_string(&FiraSans, text, &cursor_x, &cursor_y, framebuffer);
-
-        // Display the framebuffer
+        // Display the framebuffer with grayscale test pattern
         epd_draw_grayscale_image(epd_full_screen(), framebuffer);
         
         // Power off display
@@ -75,13 +69,14 @@ EpaperDisplay display;
 void setup() {
     Serial.begin(115200);
     
+    
     if (!display.init()) {
         Serial.println("Failed to initialize display!");
         return;
     }
     
-    // Display hello world
-    display.displayText("Hello World");
+    // Display the image
+    display.displayImage();
 }
 
 void loop() {
